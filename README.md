@@ -47,8 +47,8 @@ More projects will be added as I continue coursework and research.
 
 ## Contact
 
-Email: **your_email@outlook.com**  
-GitHub: **your_username**
+Email: **jianing.li.comp.econ@outlook.com / jianing.li@uwaterloo.ca**
+GitHub: **jianingli-comp**
 
 ---
 

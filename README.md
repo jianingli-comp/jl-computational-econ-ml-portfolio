@@ -1,13 +1,19 @@
 # Computational Projects Portfolio
 
-This repository contains my selected projects in:
+This repository presents my technical work at the intersection of
+- distributed systems
+- large-scale data processing
+- machine learning
+- computational economics.
 
-- Distributed systems (Scala, Spark, GraphX)
-- Machine learning and data processing
-- Computational economics and simulations
-- NLP and data analysis
+My primary focus is on understanding how algorithms behave at scale:
+how data is partitioned, shuffled, and aggregated across machines,
+and how system-level design choices affect performance, scalability,
+and modeling outcomes.
 
-The goal of this portfolio is to keep track of my technical work and support future Co-op and PhD applications.
+The projects here are developed through graduate-level coursework and
+independent exploration, and are intended to support research-oriented
+Co-op, Research Assistant, and PhD applications.
 
 ---
 
@@ -23,6 +29,31 @@ Connected Components, and Triangle Count using Apache Spark GraphX.
 - Evidence: full experimental report (PDF)
 
 -> **`graphx-distributed-graph-analytics/`**
+
+This project serves as a deep, research-style investigation into distributed
+graph processing and complements the lower-level system implementations
+described below.
+
+### Distributed Systems with Spark
+
+A collection of projects implemented using low-level Spark primitives (RDDs),
+designed to make execution behavior explicit rather than abstracted away.
+
+These projects cover the three dominant paradigms of large-scale data processing:
+
+- Graph processing: Iterative algorithms such as PageRank implemented directly on RDDs,
+with explicit handling of dead-end nodes and shuffle behavior.
+- Maching learning: Distributed spam classification using stochastic gradient descent,
+focusing on order dependence, data shuffling, model aggregation,
+and broadcast-based inference.
+- Relational analytics: Manual implementation of SQL-style analytical queries (TPC-H),
+including reduce-side joins, broadcast hash joins, and group-by aggregation,
+without using Spark SQL or DataFrame APIs.
+
+-> **`distributed-systems/`**
+
+Together, these projects form a system-level capability matrix
+that complements the GraphX flagship study.
 
 ---
 
@@ -40,39 +71,26 @@ small-scale prototypes developed during coursework and independent study.
 
 ---
 
-## Current Highlights
+## Data and Reproducibility
 
-### Selected Projects
+Large datasets used in these projects (e.g., graph data, spam classification data,
+TPC-H benchmarks) are not included in this public repository.
 
-- **Distributed Graph Analytics (Spark GraphX)**  
-  Large-scale graph algorithms with runtime and partitioning analysis.  
-  -> **`graphx-distributed-graph-analytics/`**
+This design reflects:
+- large data volumes (GB-scale)
+- course-provided or cluster-resident datasets
+- a clean separation between public code and private data
 
-- **Distributed Spam Classifier**  
-  Naive Bayes and ensemble methods in a distributed setting.  
-  -> **`machine-learning/`**
-
-- **Distributed SQL Queries (Spark SQL)**  
-  Analytical queries and execution behavior (TPC-H style).  
-  -> **`distributed-systems/`**
-
-- **Ride-sharing Analysis (Synthetic Data)**  
-  Text parsing, feature extraction, and exploratory analysis.  
-  -> **`data-projects/`**
-
-More projects will be added as I continue coursework and research.
+All programs are designed to accept dataset paths via command-line arguments
+and were tested in both local and cluster environments.
 
 ---
 
-## Skills Used
-
-- Scala, Spark, GraphX  
-- Python, Jupyter Notebook  
-- SQL, data wrangling  
-- Basic ML models  
-- Monte Carlo simulation (econometrics coursework)
-
----
+## Technologies
+- **Languages**: Scala, Python, SQL
+- **Frameworks**: Apache Spark, Spark GraphX
+- **Concepts**: distributed systems, graph analytics, machine learning,
+large-scale data processing, computational economics
 
 ## Contact
 

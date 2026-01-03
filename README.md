@@ -1,5 +1,16 @@
 # Computational Projects Portfolio
 
+This repository contains my selected projects in:
+
+- Distributed systems (Scala, Spark, GraphX)
+- Machine learning and data processing
+- Computational economics and simulations
+- NLP and data analysis
+
+The goal of this portfolio is to keep track of my technical work and support future Co-op and PhD applications.
+
+---
+
 ## Featured Project
 
 ### Distributed Graph Analytics with Spark GraphX
@@ -12,15 +23,6 @@ Connected Components, and Triangle Count using Apache Spark GraphX.
 - Evidence: full experimental report (PDF)
 
 -> **`graphx-distributed-graph-analytics/`**
-
-This repository contains my selected projects in:
-
-- Distributed systems (Scala, Spark, GraphX)
-- Machine learning and data processing
-- Computational economics and simulations
-- NLP and data analysis
-
-The goal of this portfolio is to keep track of my technical work and support future Co-op and PhD applications.
 
 ---
 
@@ -35,7 +37,6 @@ The goal of this portfolio is to keep track of my technical work and support fut
 
 Each directory contains runnable code, experimental notes, and
 small-scale prototypes developed during coursework and independent study.
-
 
 ---
 

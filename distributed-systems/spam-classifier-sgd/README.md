@@ -14,4 +14,14 @@ Model:
 - Sparse weight vector trained over hundreds of millions of tokens
 
 Result:
-- Shuffling the training data stabilizes ROCA across runs, confirming order sensitivity in SGD. 
+- Shuffling the training data stabilizes ROCA across runs, confirming order sensitivity in SGD.
+
+### Data
+
+The classifier is trained and evaluated on large-scale spam datasets
+provided as part of a distributed systems coursework.
+
+Datasets are not included in this public repository.
+All programs accept input paths via command-line arguments and were
+tested on both local and cluster environments.
+

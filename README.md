@@ -61,10 +61,6 @@ that complements the GraphX flagship study.
 
 - distributed-systems/
 - graphx-distributed-graph-analytics/
-- machine-learning/
-- computational-economics/
-- nlp/
-- data-projects/
 
 Each directory contains runnable code, experimental notes, and
 small-scale prototypes developed during coursework and independent study.

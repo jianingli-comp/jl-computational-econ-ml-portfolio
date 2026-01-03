@@ -1,4 +1,4 @@
-### Distributed Spam Classification with SGD
+## Distributed Spam Classification with SGD
 
 This project implements a large-scale spam classifier trained via
 stochastic gradient descent in Spark.

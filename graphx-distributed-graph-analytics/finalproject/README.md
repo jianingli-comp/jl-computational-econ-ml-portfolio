@@ -1,3 +1,9 @@
+```md
+Note: This directory contains the original implementation and coursework
+documentation for the CS651 final project. A high-level project overview
+is provided in the parent directory.
+```
+
 # CS 651 Final Project – GraphX Experiments
 
 This is the final project for **CS 651: Data-Intensive Distributed Computing** (Winter 2025).

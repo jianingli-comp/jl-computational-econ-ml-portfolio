@@ -11,3 +11,10 @@ Key system concepts demonstrated:
 - Performance comparison across text vs Parquet formats
 
 Queries are based on the TPC-H benchmark.
+
+### Data
+- TPC-H benchmark (text + Parquet)
+- Tested on scale factor 0.1 (local) and 10 (cluster)
+
+Datasets are assumed to be available externally.
+

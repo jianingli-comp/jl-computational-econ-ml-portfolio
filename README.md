@@ -42,7 +42,7 @@ small-scale prototypes developed during coursework and independent study.
 
 ## Current Highlights
 
-## Selected Projects
+### Selected Projects
 
 - **Distributed Graph Analytics (Spark GraphX)**  
   Large-scale graph algorithms with runtime and partitioning analysis.  

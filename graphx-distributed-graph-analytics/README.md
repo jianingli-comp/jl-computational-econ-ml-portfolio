@@ -65,6 +65,14 @@ project report.
 
 ---
 
+## Experimental results
+
+A concise summary of experimental findings is available in `results/`,
+with full methodology, tables, and figures documented in the project
+report (PDF).
+
+---
+
 ## Repository structure
 ```text
 graphx-distributed-graph-analytics/

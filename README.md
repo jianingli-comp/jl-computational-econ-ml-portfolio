@@ -11,7 +11,7 @@ Connected Components, and Triangle Count using Apache Spark GraphX.
 - Methods: GraphX operators, Pregel-style message passing
 - Evidence: full experimental report (PDF)
 
--> graphx-distributed-graph-analytics/
+-> **`graphx-distributed-graph-analytics/`**
 
 This repository contains my selected projects in:
 

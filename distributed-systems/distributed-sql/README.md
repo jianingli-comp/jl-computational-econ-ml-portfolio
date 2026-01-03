@@ -1,4 +1,13 @@
-# Distributed SQL Queries
+## Distributed SQL Analytics over TPC-H (RDD-based)
 
-TPC-H style analytical SQL queries implemented using Spark SQL.
-Explores joins, filters, and distributed execution planning on large datasets.
+This project manually implements a subset of TPC-H analytical queries
+using low-level Spark RDD transformations.
+
+Key system concepts demonstrated:
+- Reduce-side joins via cogroup
+- Broadcast hash joins for small dimension tables
+- Join ordering and memory-aware planning
+- Aggregation and grouping without Spark SQL
+- Performance comparison across text vs Parquet formats
+
+Queries are based on the TPC-H benchmark.

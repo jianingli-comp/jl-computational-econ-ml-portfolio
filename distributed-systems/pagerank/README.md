@@ -13,5 +13,12 @@ Tested on:
 - Gnutella P2P network (~6K nodes)
 - Wikipedia link graph (14M nodes, 117M edges)
 
+### Data
+- Small graphs: Gnutella P2P network
+- Large graphs: Wikipedia link graph (14M nodes)
+
+Data is not included in this repository.
+Paths are provided at runtime via --input.
+
 Based on large-scale graph processing techniques discussed in distributed systems coursework. 
 

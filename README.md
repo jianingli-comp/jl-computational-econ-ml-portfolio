@@ -92,11 +92,18 @@ and were tested in both local and cluster environments.
 - **Concepts**: distributed systems, graph analytics, machine learning,
 large-scale data processing, computational economics
 
+---
+
 ## Contact
 
 Email: **jianing.li.comp.econ@outlook.com / jianing.li@uwaterloo.ca**
 
 GitHub: **jianingli-comp**
+
+---
+
+Additional projects in machine learning, computational economics,
+and text analysis may be added as this portfolio evolves.
 
 ---
 

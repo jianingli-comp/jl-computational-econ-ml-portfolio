@@ -1,4 +1,4 @@
-### PageRank & Personalized PageRank (RDD-based)
+## PageRank & Personalized PageRank (RDD-based)
 
 This project implements scalable PageRank and multi-source personalized PageRank
 using low-level Spark RDDs.

@@ -62,9 +62,11 @@ A data cleaning and exploratory analysis project focused on extracting structure
 Focus: rule-based text parsing, data cleaning, and exploratory analysis of informal online posts  
 Data: synthetic ride-sharing posts designed to mimic real Facebook group content  
 Methods: regular expressions, domain-aware post-processing, coverage diagnostics  
-Outputs: cleaned dataset, route distributions, weekday patterns, and pricing summaries  
+Outputs: cleaned dataset, route distributions, weekday patterns, and pricing summaries.
 
 -> **`ride-sharing-behavioral-analytics/`**
+
+The project is adapted from an academic course project.
 
 ---
 

@@ -55,12 +55,24 @@ without using Spark SQL or DataFrame APIs.
 Together, these projects form a system-level capability matrix
 that complements the GraphX flagship study.
 
+### Text-based Ride-Sharing Behavioral Analytics (Synthetic Data)
+
+A data cleaning and exploratory analysis project focused on extracting structured behavioral information from noisy, user-generated ride-sharing posts.
+
+Focus: rule-based text parsing, data cleaning, and exploratory analysis of informal online posts  
+Data: synthetic ride-sharing posts designed to mimic real Facebook group content  
+Methods: regular expressions, domain-aware post-processing, coverage diagnostics  
+Outputs: cleaned dataset, route distributions, weekday patterns, and pricing summaries  
+
+-> **`ride-sharing-behavioral-analytics/`**
+
 ---
 
 ## Project Structure
 
 - distributed-systems/
 - graphx-distributed-graph-analytics/
+- ride-sharing-behavioral-analytics/
 
 Each directory contains runnable code, experimental notes, and
 small-scale prototypes developed during coursework and independent study.

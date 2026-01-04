@@ -1,0 +1,11 @@
+route,count
+Berkeley -> Davis,12
+Fremont -> Sacramento,11
+San Francisco -> Berkeley,10
+San Jose -> Berkeley,10
+San Jose -> Fremont,10
+Sunnyvale -> Sacramento,9
+Fremont -> Palo,9
+Sacramento -> Davis,9
+Palo Alto -> San Francisco,8
+Sunnyvale -> Berkeley,8

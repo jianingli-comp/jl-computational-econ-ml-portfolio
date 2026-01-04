@@ -53,26 +53,26 @@ ride-sharing-behavioral-analytics/
 
 ---
 
-### Data Generation (**`00_synthetic_posts_generator.ipynb`**)
+### Data Generation (`00_synthetic_posts_generator.ipynb`)
 
-The notebook **`00_synthetic_posts_generator.ipynb`** generates synthetic ride-sharing posts with **intentionally injected noise**, including:
+The notebook `00_synthetic_posts_generator.ipynb` generates synthetic ride-sharing posts with **intentionally injected noise**, including:
 
 - Multiple date hashtags in a single post
 - Missing or duplicated hashtags
-- Multiple route expression formats (**`A->B`**, **`A to B`**, **`A-B`**, **`from A to B`**)
-- Price formats such as **`$20`**, **`$20-30`**, **`20 dollars`**, or missing prices
+- Multiple route expression formats (`A->B`, `A to B`, `A-B`, `from A to B`)
+- Price formats such as `$20`, `$20-30`, `20 dollars`, or missing prices
 - Informal language, emojis, spacing inconsistencies, and light typos
 
 Three datasets are generated (500, 2000, and 5000 posts) to verify that observed patterns are stable across sample sizes.
 
 ---
 
-### Parsing and Cleaning (**`01_text_to_dataset_and_eda.ipynb`**)
+### Parsing and Cleaning (`01_text_to_dataset_and_eda.ipynb`)
 
-The notebook **`01_text_to_dataset_and_eda.ipynb`** implements a **report-aligned, rule-based parsing, pipeline,** consisting of:
+The notebook `01_text_to_dataset_and_eda.ipynb` implements a **report-aligned, rule-based parsing, pipeline,** consisting of:
 
 #### Parsed Fields
-- **Ride type**: **`ride/drive`** extracted from hashtags
+- **Ride type**: `ride/drive` extracted from hashtags
 - **Date of ride and weekday**: inferred from the first valid hashtag
 - **Price**: extracted primarily from driver posts with support for ranges and text-based prices
 - **Route**: (location -> destination), parsed using multiple regex patterns and domain-aware post-processing
@@ -80,7 +80,7 @@ The notebook **`01_text_to_dataset_and_eda.ipynb`** implements a **report-aligne
 #### Design Choices
 - Only the **first hashtag** is used when multiple date tags appear
 - Rule-based parsing is preferred for transparency and interpretability
-- Lightweight post-hoc repairs are applied to fix systematic truncation artifacts (e.g., recovering **`San Jose`** from partial matches)
+- Lightweight post-hoc repairs are applied to fix systematic truncation artifacts (e.g., recovering `San Jose` from partial matches)
 
 #### Output
 ``` text
@@ -92,13 +92,13 @@ This dataset represents the primary analysis-ready output of the project.
 
 ### Exploratory Data Analysis
 
-The following results are generated and saved in **`results/`**:
+The following results are generated and saved in `results/`:
 - Distribution of top destinations
 - Distribution of top routes (location -> destination)
 - Weekday of ride inffered from hash tag dates
 - Price distribution for driver posts
 
-Cleaning coverage metrics are summarized in **`results/tables/coverage_summary.csv`**.
+Cleaning coverage metrics are summarized in `results/tables/coverage_summary.csv`.
 
 The main analysis is conducted on the **2,000-post dataset**, which is sufficient to capture structural variability in route expressions and pricing behavior. Smaller (500) and larger (5,000) datasets were generated for validation purposes but are not analyzed in detail.
 
@@ -125,8 +125,8 @@ These results highlight the effectiveness of interpretable parsing strategies fo
 ### Reproducibility
 
 To reproduce the analysis:
-1. Run **`00_synthetic_posts_generator.ipynb`** to generate raw synthetic posts
-2. Run **`01_text_to_dataset.ipynb`** to perform parsing and analysis
+1. Run `00_synthetic_posts_generator.ipynb` to generate raw synthetic posts
+2. Run `01_text_to_dataset.ipynb` to perform parsing and analysis
 
 All outputs are deterministic given the fixed random seed.
 
@@ -148,4 +148,5 @@ The original report is included for reference:
 The current repository focuses on a cleaned, reproducible version of the pipeline using synthetic data.
 
 ---
+
 

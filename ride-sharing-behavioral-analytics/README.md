@@ -137,3 +137,15 @@ All outputs are deterministic given the fixed random seed.
 This project demonstrates a complete, transparent pipeline for extracting structured behavioral data from noisy user-generated text, with an emphasis on data cleaning, interpretability, and robustness rather than black-box modeling.
 
 ---
+
+### Original Project Report
+
+This project is adapted from a course project.  
+The original report is included for reference:
+
+- `reports/original_project_report.pdf`
+
+The current repository focuses on a cleaned, reproducible version of the pipeline using synthetic data.
+
+---
+

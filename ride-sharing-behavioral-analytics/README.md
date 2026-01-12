@@ -1,5 +1,3 @@
----
-
 ## Ride-Sharing Behavioral Analytics (Synthetic Data)
 
 This project analyzes **user-generated ride-sharing posts** and demonstrates a complete pipeline for transforming **noisy, unstructured text into a clean, structured dataset** suitable for analysis.
@@ -148,5 +146,6 @@ The original report is included for reference:
 The current repository focuses on a cleaned, reproducible version of the pipeline using synthetic data.
 
 ---
+
 
 

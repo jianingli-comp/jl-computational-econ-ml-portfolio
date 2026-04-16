@@ -1,0 +1,644 @@
+---
+title: "FNETS_RobustnessTest"
+author: "Jianing Li"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# The codes is based on real_forecast_submission.R from paper FNETS: Factor-Adjusted Network Estimation and Forecasting for High-Dimensional Time Series by Mateeo Barigozzi, Haeran Cho, Dom Owens (2024), https://doi.org/10.1080/07350015.2023.2257270.
+
+# The code will approximately need around 2 hours to run in total.  Specifically, FNETS with n=252 rolling window will need around 1 hr 30 mins and n=126 rolling window will need around 30-50 mins.
+
+# Our modifications on the FNETS main body:
+
+# 1. Removed the part of FARM methods which was the "baseline" method metioned in the paper for contrasting FNETS methods.
+
+# 2. Removed fd forecast - full FNETS forecast via Dantzig selector.  It was used as robustness check in supplementary Appendix, we are going to do our robustness check via different rolling window (n=126) instead.
+
+# 3. Removed fc forecast - Factor-based forecast because we are assessing the full FNETS forcasting performance instead of each factor's forecasting performance.
+
+# 4. For time constraints, we only use restricted LASSO FNETS, because unrestricted one is also not the main target of the original paper.
+
+# 5. For VAR(n), instead of original n=1:5, we only use n=1 because the original paper use VAR(1) to VAR(5) to do the sensitivity analysis, we don't need to do here.
+
+## Start
+
+library(glmnet)
+library(fnets)
+# load('blm.RData') ## Might need to manually input the file
+
+```
+
+```{r}
+
+## Data Preparation
+
+x0 <- t(old_clean[, -1]) # old_clean is the dataset name directly read from blm.RData with (46+1) * 3269 dimensions, -1 because the first column is the time dimension.
+
+p <- dim(x0)[1] # the number of firms, 46 here.
+
+dates <- as.Date(paste(old_clean[, 1]), format = '%Y%m%d')
+
+n <- 252 # rolling window for 252 trading days, basically a year length of trading days.
+
+kern.bw <- floor(4 * (n/log(n))^(1/3)) # In Section 3.2, Step 1: Factor Adjustment via Dynamic PCA, FNETS use kernel spectral density estimator and here is the bandwidth m in the function, it controls how many lags of the sample autocovariance are used when estimating the spectral density matrix.  Their theory gives an optimal choice of m should grow at the same rate as (n/log(n))^(1/3) as the sample size n increases.  The code ignores p because log(np) = log(n) when p is fixed, and times 4 for a scaling constant.
+
+```
+
+```{r}
+## Regime split
+tt_calm   <- which(old_clean$datadate >= 20040101 & old_clean$datadate <= 20061231)
+tt_crisis <- which(old_clean$datadate >= 20070101 & old_clean$datadate <= 20091231)
+
+tt_calm   <- tt_calm[tt_calm > n]
+tt_crisis <- tt_crisis[tt_crisis > n]
+
+cat('Calm:  ', length(tt_calm),   'days\n')
+cat('Crisis:', length(tt_crisis), 'days\n')
+```
+
+# Assumptions Tests (Stationarity and Heavy-tailed)
+
+```{r, warning=FALSE}
+library(tseries)
+library(moments)
+
+# we set up a function for testing both stationarity and Heavy tails here
+
+check_assumptions <- function(x, label) {
+  p <- nrow(x)
+  n <- ncol(x)
+  cat("===============\n")
+  cat("Period:", label, "\n")
+  cat("Dimensions: p =", p, ", T =", n, "\n")
+  cat("===============\n")
+
+  # A1: Stationarity (ADF Test)
+  adf_pvals <- apply(x, 1, function(z) adf.test(z)$p.value)
+  cat("\n A1: Stationarity (ADF Test) \n")
+  cat("% series stationary (p < 0.05):",
+      round(mean(adf_pvals < 0.05) * 100, 1), "%\n")
+  cat("Min p-value:", round(min(adf_pvals), 4), "\n")
+  cat("Max p-value:", round(max(adf_pvals), 4), "\n")
+
+  # A3: Heavy Tails (Sample kurtosis + Jarque-Bera + Anscombe-Glynn test)
+  kurt     <- apply(x, 1, kurtosis) 
+  jb_pvals <- apply(x, 1, function(z) jarque.bera.test(z)$p.value)
+  ag_pvals <- apply(x, 1, function(z) anscombe.test(z)$p.value)
+  
+  cat("\n A3: Heavy Tails \n")
+  cat("Mean kurtosis:", round(mean(kurt), 3), "\n")
+  cat("% series JB reject normality (p<0.05):",
+      round(mean(jb_pvals < 0.05) * 100, 1), "%\n")
+  cat("% series AG reject kurtosis=3 (p<0.05):",
+      round(mean(ag_pvals < 0.05) * 100, 1), "%\n")
+}
+
+check_assumptions(x0[, tt_calm],   "Calm Period (2004-2006)")
+check_assumptions(x0[, tt_crisis], "Crisis Period (2007-2009)")
+```
+
+# LASSO-based FNETS for both Calm and Crisis Period (Sparsity test included) (n = 252)
+
+```{r}
+
+## FNETS sets
+
+### Full FENTS forecast via LASSO
+
+# (this little part is for the Sparsity Assumption test)
+edge_density <- rep(NA, dim(x0)[2])
+s_in_vec     <- rep(NA, dim(x0)[2])
+q_vec        <- rep(NA, dim(x0)[2])
+#===========
+
+fl <- array(NA, dim = c(dim(x0), 1)) # 46*3269*1 array storing the one-step-ahead predicted values for each of the 46 firms on each trading day.
+fle <- array(NA, dim = c(dim(fl)[2:3], 2)) # 3269*1*2 array storing the corresponding forecast errors, where the last dimension indexes two error metrics: avg (average relative squared error across all firms) and max (maximum relative absolute error across all firms)
+
+dimnames(fl)[[3]] <-
+  dimnames(fle)[[2]] <- 'lasso1.restricted'
+
+dimnames(fle)[[3]] <- c('avg', 'max')
+
+tt.ind <- c(tt_calm, tt_crisis)
+
+## Main FNETS with only Factor Components and LASSO
+
+for(tt in tt.ind){  # tt: forecast day index
+
+  yl <- matrix(0, nrow = p, ncol = 1) # 46*1
+
+  int <- max(1, tt - n):(tt - 1) # estimation window index, (tt-252):(tt-1), 252 trading days before the forecast day.  max(1, ...) preventing over the boundaries.
+  
+  x <- x0[, int]  # 46*252 matrix, window data
+  x.true <- x0[, tt] # 46*1 array, the true value of tt day.
+  
+  # as FNETS assumes zero-mean process, so we need to demean first.
+  mean.x <- apply(x, 1, mean) 
+  xx <- x - mean.x
+  
+  ### FNETS Step 1
+  
+  dpca <- fnets:::dyn.pca(xx, q = NULL, ic.op = 5, kern.bw = kern.bw) # Estimates the spectral density matrix of the demeaned observations xx using the Barlett kernel estimator defined in Equation (7) in Barigozzi et al. (2024).  It Extracts the autocovariance matrices of X_t, chi_t and xi_t.  It's key output is 'acvGamma_i' which is the estimated autocovariance matrix of the latent idiosyncratic process xi_t, obtained by hat_Gamma_xi = hat_Gamma_x-hat_Gamma_chi.
+  
+  # setting q = NULL with ic.op = 5 instructs dyn.cpa() to estimate the number of common factors q from the data using the information criterion of Hallin & Liska (2007).
+  
+  
+  q <- dpca$q
+  
+  if(is.na(q) | q == 0){  # Safeguard
+    dpca <- fnets:::dyn.pca(xx, q = 1, ic.op = 5, kern.bw = kern.bw)
+    q <- dpca$q
+  }
+  
+  
+  spec <- dpca$spec # estimated spectral density matrix which is the direct output of the Barlett kernel estimator.
+  
+  acv <- dpca$acv # estimated autocovaraince matrices of 'acvGamma_x' (sample autocovariance matrix of the observed process X_t), 'acvGamma_c' (estimated autocovariance matrix of the common component chi_t), 'acvGamma_i' (estimated autocovariance matrix of the latent idiosyncratic process xi_t)
+
+  cve <- fnets:::common.irf.estimation(xx, Gamma_c = acv$Gamma_c, q = q,
+                                       factor.var.order = NULL, max.var.order = NULL,
+                                       trunc.lags = 20, n.perm = 30)  # Impulse response filter B(L) in the factor model form Equation (1) of the paper.  It fits a VAR to the estimated factors to obtain the dynamic factor loadings and truncated at 'trunc.lags=20' lags.
+  
+  obj <- list(acv = acv, spec = spec, loadings = cve$irf.est, factors = cve$u.est, q = q, mean.x = mean.x, kern.bw = kern.bw) 
+  
+  attr(obj, "factor") <- "unrestricted"
+  
+  # Here are all Step 1 outputs to be collected into a single list obj that is passed to the downstream functions.  attr(obj, "factor") <- "unrestricted" flags to common.preditc() that the common component was estimated under the unrestricted GDFM framework rather than a static factor model.
+  
+    cpre.static <- fnets:::common.predict(obj, x, n.ahead = 1, r = 'ic', fc.restricted = TRUE)
+    # This produces the one-step-ahead forecast of the common component with obj.  fc.restricted = TRUE selects the restricted static facotr model forecasting method described in Section 4.1 of the original paper.
+    
+  #=================================================
+  
+  ## FNETS Step 2+3: Yule-Walker VAR + idiosyncratic forecast
+
+  lambda.max <- max(abs(xx %*% t(xx)/n)) * 1
+  lambda.path <- round(exp(seq(log(lambda.max), log(lambda.max * .0001), length.out = 20)), digits = 10)
+  lambda <- lambda.path[9]
+  
+  dd <- 1
+  mg <- fnets:::make.gg(acv$Gamma_i, dd)
+  ive <- fnets:::var.lasso(mg$GG, mg$gg, lambda)
+  
+  # This part is the Section 3.3. of the original paper.  The VAR parameters beta are estimated via the l1-regularized Yule-Walker estimator in Equation (8).
+  
+  # Lambda is the LASSO penalization parameter in Equation (8).  It controls the sparsity of the estimated network.  The code uses a fixed grid of 20 values on a log scale between lambda.max and lambda.max * 0.0001 and picks the 9th value.
+  
+  # make.gg() constructs the Yule-Walker matrices G and g from the estimated autocovariance matrices of the latent idiosyncratic process obtained in Step 1.
+  
+  # var.lasso() solves the penalized problem and returns the estimated VAR transition matrix and related quantities.
+  
+  obj$idio.var <- ive
+  ipre <- fnets:::idio.predict(obj, x, cpre.static, n.ahead = 1)
+  yl[, 1] <- mean.x + cpre.static$fc + ipre$fc
+  
+  # Here is the forcasting.  Corresponding to Section 4 of the original paper.
+  
+  # idio.predict() computes the idiosyncratic forecast using the estimated VAR transition matrix.
+  
+  # yl is the final forecast adds back three components including sample mean, common component forecast and the idiosyncratic forecast.  
+  
+  # === Sparsity Assumption Test ===
+  G <- ive$beta != 0
+  edge_density[tt] <- sum(G) / (p * p)
+  s_in_vec[tt]     <- max(colSums(G))
+  q_vec[tt]        <- q
+  # ===================================
+  
+  
+  fl[, tt, ] <- yl
+  fle[tt,, 1] <- apply(yl, 2, function(yy){sum((x.true - yy)^2)/sum(x.true^2)})
+  fle[tt,, 2] <- apply(yl, 2, function(yy){max(abs(x.true - yy))/max(abs(x.true))})
+  
+  # Forecast errors
+  # fl stores the raw forecast yl for day tt.
+  # fle stores two relative forecast error metrics comparing the forecast yl against the true value x.ture.
+  
+}
+
+ls <- list(fl = fl, fle = fle, edge_density = edge_density, s_in_vec = s_in_vec, q_vec = q_vec)
+save(ls, file = paste('fnets_forecast.RData', sep = ''))
+
+
+```
+
+
+# Robustness (n = 126)
+
+
+```{r}
+
+# Robustness Check: n = 126 (half-year rolling window)
+
+n126 <- 126
+kern.bw126 <- floor(4 * (n126/log(n126))^(1/3))
+
+fl126 <- array(NA, dim = c(dim(x0), 1))
+fle126 <- array(NA, dim = c(dim(fl126)[2:3], 2))
+dimnames(fl126)[[3]] <- dimnames(fle126)[[2]] <- 'lasso1.restricted'
+dimnames(fle126)[[3]] <- c('avg', 'max')
+
+# (this little part is for the Sparsity Assumption test)
+edge_density126 <- rep(NA, dim(x0)[2])
+s_in_vec126     <- rep(NA, dim(x0)[2])
+q_vec126        <- rep(NA, dim(x0)[2])
+#===========
+
+for(tt in tt.ind){
+  yl <- matrix(0, nrow = p, ncol = 1)
+  int <- max(1, tt - n126):(tt - 1)
+  x <- x0[, int]
+  x.true <- x0[, tt]
+  mean.x <- apply(x, 1, mean)
+  xx <- x - mean.x
+
+  dpca <- fnets:::dyn.pca(xx, q = NULL, ic.op = 5, kern.bw = kern.bw126)
+  q <- dpca$q
+  if(is.na(q) | q == 0){
+    dpca <- fnets:::dyn.pca(xx, q = 1, ic.op = 5, kern.bw = kern.bw126)
+    q <- dpca$q
+  }
+  spec <- dpca$spec
+  acv  <- dpca$acv
+
+  cve <- fnets:::common.irf.estimation(xx, Gamma_c = acv$Gamma_c, q = q,
+                                       factor.var.order = NULL, max.var.order = NULL,
+                                       trunc.lags = 20, n.perm = 30)
+
+  obj <- list(acv = acv, spec = spec, loadings = cve$irf.est,
+              factors = cve$u.est, q = q, mean.x = mean.x, kern.bw = kern.bw126)
+  attr(obj, "factor") <- "unrestricted"
+
+  cpre.static <- fnets:::common.predict(obj, x, n.ahead = 1, r = 'ic', fc.restricted = TRUE)
+
+  lambda.max  <- max(abs(xx %*% t(xx)/n126)) * 1
+  lambda.path <- round(exp(seq(log(lambda.max), log(lambda.max * .0001), length.out = 20)), digits = 10)
+  lambda <- lambda.path[9]
+
+  dd <- 1
+  mg  <- fnets:::make.gg(acv$Gamma_i, dd)
+  ive <- fnets:::var.lasso(mg$GG, mg$gg, lambda)
+  obj$idio.var <- ive
+  ipre <- fnets:::idio.predict(obj, x, cpre.static, n.ahead = 1)
+  yl[, 1] <- mean.x + cpre.static$fc + ipre$fc
+  
+  
+# === Sparsity Test ===
+  G <- ive$beta != 0
+  edge_density126[tt] <- sum(G) / (p * p)
+  s_in_vec126[tt]     <- max(colSums(G))
+  q_vec126[tt]        <- q
+# ==========================
+
+  fl126[, tt, ]  <- yl
+  fle126[tt,, 1] <- apply(yl, 2, function(yy){ sum((x.true - yy)^2)/sum(x.true^2) })
+  fle126[tt,, 2] <- apply(yl, 2, function(yy){ max(abs(x.true - yy))/max(abs(x.true)) })
+}
+
+ls126 <- list(fl = fl126, fle = fle126,
+              edge_density = edge_density126,
+              s_in_vec = s_in_vec126, q_vec = q_vec126)
+save(ls126, file = 'fnets_forecast_126.RData')
+```
+
+
+# Factor number estimation
+
+```{r}
+
+# Factor number estimation (Assumption 1: Factor Strength)
+
+x_calm   <- x0[, tt_calm]
+x_crisis <- x0[, tt_crisis]
+
+kern.bw_calm <- floor(4 * (ncol(x_calm)/log(ncol(x_calm)))^(1/3))
+dpca_calm <- fnets:::dyn.pca(x_calm - rowMeans(x_calm), 
+                              q = NULL, ic.op = 5, kern.bw = kern.bw_calm)
+
+kern.bw_crisis <- floor(4 * (ncol(x_crisis)/log(ncol(x_crisis)))^(1/3))
+dpca_crisis <- fnets:::dyn.pca(x_crisis - rowMeans(x_crisis), 
+                                q = NULL, ic.op = 5, kern.bw = kern.bw_crisis)
+
+cat("Calm period q:", dpca_calm$q, "\n")
+cat("Crisis period q:", dpca_crisis$q, "\n")
+
+```
+
+
+# Network Structure (discarded, not use because time constrainted)
+
+
+```{r}
+
+# Network Structure: Full fnets() on calm and crisis periods
+
+#library(igraph)
+
+# Use the full period data (not rolling window)
+#x_calm   <- x0[, tt_calm]
+#x_crisis <- x0[, tt_crisis]
+
+# Run full fnets for each period
+#net_calm <- fnets(x_calm,
+#                  q = "ic", var.order = 1, var.method = #"lasso",
+#                  do.lrpc = TRUE,
+#                  var.args = list(n.cores = 1))
+
+#net_crisis <- fnets(x_crisis,
+#                    q = "ic", var.order = 1, var.method = #"lasso",
+#                    do.lrpc = TRUE,
+#                    var.args = list(n.cores = 1))
+
+# Extract adjacency matrices
+# N^G: Granger (directed)
+#G_calm   <- (net_calm$idio.var$beta   != 0) * 1
+#G_crisis <- (net_crisis$idio.var$beta != 0) * 1
+
+# N^C: Contemporaneous (undirected, from Gamma^{-1})
+#C_calm   <- (net_calm$idio.var$Gamma_inv  != 0) * 1
+#C_crisis <- (net_crisis$idio.var$Gamma_inv != 0) * 1
+#diag(C_calm) <- diag(C_crisis) <- 0
+
+# Network summary
+#cat("=== Granger Network (N^G) ===\n")
+#cat("Calm   - density:", round(sum(G_calm)   / (p*(p-1)), 4),
+#    " | max in-degree:", max(colSums(G_calm)), "\n")
+#cat("Crisis - density:", round(sum(G_crisis) / (p*(p-1)), 4),
+#    " | max in-degree:", max(colSums(G_crisis)), "\n")
+
+#cat("\n=== Contemporaneous Network (N^C) ===\n")
+#cat("Calm   - density:", round(sum(C_calm)   / (p*(p-1)), 4),
+#    " | max degree:", max(rowSums(C_calm)), "\n")
+#cat("Crisis - density:", round(sum(C_crisis) / (p*(p-1)), 4),
+#    " | max degree:", max(rowSums(C_crisis)), "\n")
+
+# Top hub nodes (firms with highest in-degree in Granger network)
+#firm_names <- colnames(old_clean)[-1]
+#cat("\nTop 5 Granger hubs (calm):\n")
+#print(sort(colSums(G_calm), decreasing=TRUE)[1:5])
+#cat("Top 5 Granger hubs (crisis):\n")
+#print(sort(colSums(G_crisis), decreasing=TRUE)[1:5])
+
+```
+
+
+# Results
+
+### n = 252
+
+
+```{r}
+
+## read
+
+load('fnets_forecast.RData')
+
+for(period in c('calm', 'crisis')){
+  tt.ind <- if(period == 'calm') tt_calm else tt_crisis
+  err_avg <- ls$fle[tt.ind, 1, 1]  
+  err_max <- ls$fle[tt.ind, 1, 2] 
+  cat('\n', period, '\n')
+  cat('avg - mean:', round(mean(err_avg, na.rm=TRUE), 4),
+      'median:', round(median(err_avg, na.rm=TRUE), 4),
+      'sd:', round(sd(err_avg, na.rm=TRUE), 4), '\n')
+  cat('max - mean:', round(mean(err_max, na.rm=TRUE), 4),
+      'median:', round(median(err_max, na.rm=TRUE), 4),
+      'sd:', round(sd(err_max, na.rm=TRUE), 4), '\n')
+}
+
+cat('=== Calm: sparsity ===\n')
+cat('Edge density mean:', round(mean(ls$edge_density[tt_calm], na.rm=TRUE), 4), '\n')
+cat('s_in mean:',        round(mean(ls$s_in_vec[tt_calm],     na.rm=TRUE), 2), '\n')
+cat('q mean:',           round(mean(ls$q_vec[tt_calm],         na.rm=TRUE), 2), '\n')
+
+cat('=== Crisis: sparsity ===\n')
+cat('Edge density mean:', round(mean(ls$edge_density[tt_crisis], na.rm=TRUE), 4), '\n')
+cat('s_in mean:',        round(mean(ls$s_in_vec[tt_crisis],     na.rm=TRUE), 2), '\n')
+cat('q mean:',           round(mean(ls$q_vec[tt_crisis],         na.rm=TRUE), 2), '\n')
+
+```
+
+
+### n = 126
+
+```{r}
+
+# Robustness Check: n=126 results
+load('fnets_forecast_126.RData')
+
+for(period in c('calm', 'crisis')){
+  tt.ind <- if(period == 'calm') tt_calm else tt_crisis
+  err_avg <- ls126$fle[tt.ind, 1, 1]
+  err_max <- ls126$fle[tt.ind, 1, 2]
+  cat('\n[n=126]', period, '\n')
+  cat('avg - mean:', round(mean(err_avg, na.rm=TRUE), 4),
+      'median:', round(median(err_avg, na.rm=TRUE), 4),
+      'sd:', round(sd(err_avg, na.rm=TRUE), 4), '\n')
+  cat('max - mean:', round(mean(err_max, na.rm=TRUE), 4),
+      'median:', round(median(err_max, na.rm=TRUE), 4),
+      'sd:', round(sd(err_max, na.rm=TRUE), 4), '\n')
+}
+
+cat('=== [n=126] Calm: sparsity ===\n')
+cat('Edge density mean:', round(mean(ls126$edge_density[tt_calm], na.rm=TRUE), 4), '\n')
+cat('s_in mean:',        round(mean(ls126$s_in_vec[tt_calm],     na.rm=TRUE), 2), '\n')
+cat('q mean:',           round(mean(ls126$q_vec[tt_calm],         na.rm=TRUE), 2), '\n')
+
+cat('=== [n=126] Crisis: sparsity ===\n')
+cat('Edge density mean:', round(mean(ls126$edge_density[tt_crisis], na.rm=TRUE), 4), '\n')
+cat('s_in mean:',        round(mean(ls126$s_in_vec[tt_crisis],     na.rm=TRUE), 2), '\n')
+cat('q mean:',           round(mean(ls126$q_vec[tt_crisis],         na.rm=TRUE), 2), '\n')
+
+```
+
+
+# Result Significance
+
+```{r}
+
+## t-test on the FNETS forcast results (n=252)
+
+fe_avg_calm <- ls$fle[tt_calm, 1, 1]
+fe_avg_crisis <- ls$fle[tt_crisis, 1, 1]
+
+fe_max_calm <- ls$fle[tt_calm, 1, 2]
+fe_max_crisis <- ls$fle[tt_crisis, 1, 2]
+
+t.test(fe_avg_calm, fe_avg_crisis, alternative = "two.sided")
+t.test(fe_max_calm, fe_max_crisis, alternative = "two.sided")
+
+# n=126 t-tests
+fe_avg_calm126   <- ls126$fle[tt_calm,   1, 1]
+fe_avg_crisis126 <- ls126$fle[tt_crisis, 1, 1]
+
+fe_max_calm126   <- ls126$fle[tt_calm,   1, 2]
+fe_max_crisis126 <- ls126$fle[tt_crisis, 1, 2]
+
+t.test(fe_avg_calm126, fe_avg_crisis126, alternative = "two.sided")
+t.test(fe_max_calm126, fe_max_crisis126, alternative = "two.sided")
+
+```
+
+# Plots
+
+```{r}
+# Plotting
+
+
+library(ggplot2)
+library(patchwork)
+
+dates_calm   <- dates[tt_calm]
+dates_crisis <- dates[tt_crisis]
+
+all_tt    <- c(tt_calm, tt_crisis)
+all_dates <- dates[all_tt]
+period_label <- c(rep("Calm (2004-2006)", length(tt_calm)),
+                  rep("Crisis (2007-2009)", length(tt_crisis)))
+
+# =============
+# FE_max time series plot
+
+
+df_femax <- data.frame(
+  date   = all_dates,
+  fe_max = ls$fle[all_tt, 1, 2],
+  period = period_label
+)
+
+p1 <- ggplot(df_femax, aes(x = date, y = fe_max, color = period)) +
+  geom_line(linewidth = 0.4, alpha = 0.8) +
+  geom_vline(xintercept = as.Date("2007-01-01"), 
+             linetype = "dashed", color = "grey40", linewidth = 0.6) +
+  scale_color_manual(values = c("Calm (2004-2006)"   = "#2166ac",
+                                "Crisis (2007-2009)" = "#d6604d")) +
+  labs(title = "Figure 2: Max Forecast Error Over Time",
+       x = NULL, y = "FE_max", color = NULL) +
+  theme_bw() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 11))
+
+# ==============
+# Edge Density Time series plot
+
+df_edge <- data.frame(
+  date         = all_dates,
+  edge_density = ls$edge_density[all_tt],
+  period       = period_label
+)
+
+p2 <- ggplot(df_edge, aes(x = date, y = edge_density, color = period)) +
+  geom_line(linewidth = 0.4, alpha = 0.8) +
+  geom_vline(xintercept = as.Date("2007-01-01"),
+             linetype = "dashed", color = "grey40", linewidth = 0.6) +
+  scale_color_manual(values = c("Calm (2004-2006)"   = "#2166ac",
+                                "Crisis (2007-2009)" = "#d6604d")) +
+  labs(title = "Figure 1: Network Edge Density Over Time",
+       x = NULL, y = "Edge Density", color = NULL) +
+  theme_bw() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 11))
+
+# ============
+# FE_avg Box plot
+
+df_avg <- data.frame(
+  value  = c(ls$fle[tt_calm,     1, 1], ls$fle[tt_crisis,     1, 1],
+             ls126$fle[tt_calm,  1, 1], ls126$fle[tt_crisis,  1, 1]),
+  period = c(rep("Calm",   length(tt_calm)),   rep("Crisis", length(tt_crisis)),
+             rep("Calm",   length(tt_calm)),   rep("Crisis", length(tt_crisis))),
+  window = c(rep("n = 252", length(tt_calm) + length(tt_crisis)),
+             rep("n = 126", length(tt_calm) + length(tt_crisis)))
+)
+
+p3a <- ggplot(df_avg, aes(x = period, y = value, fill = period)) +
+  geom_boxplot(outlier.size = 0.3, outlier.alpha = 0.3) +
+  facet_wrap(~ window) +
+  scale_fill_manual(values = c("Calm" = "#92c5de", "Crisis" = "#f4a582")) +
+  labs(title = "Figure 4: Average Forecast Error by Period and Window Size",
+       x = NULL, y = "FE_avg", fill = NULL) +
+  theme_bw() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 11))
+
+# ==============
+# FE_max Box plot
+
+df_max <- data.frame(
+  value  = c(ls$fle[tt_calm,     1, 2], ls$fle[tt_crisis,     1, 2],
+             ls126$fle[tt_calm,  1, 2], ls126$fle[tt_crisis,  1, 2]),
+  period = c(rep("Calm",   length(tt_calm)),   rep("Crisis", length(tt_crisis)),
+             rep("Calm",   length(tt_calm)),   rep("Crisis", length(tt_crisis))),
+  window = c(rep("n = 252", length(tt_calm) + length(tt_crisis)),
+             rep("n = 126", length(tt_calm) + length(tt_crisis)))
+)
+
+p3b <- ggplot(df_max, aes(x = period, y = value, fill = period)) +
+  geom_boxplot(outlier.size = 0.3, outlier.alpha = 0.3) +
+  facet_wrap(~ window) +
+  scale_fill_manual(values = c("Calm" = "#92c5de", "Crisis" = "#f4a582")) +
+  labs(title = "Figure 5: Max Forecast Error by Period and Window Size",
+       x = NULL, y = "FE_max", fill = NULL) +
+  theme_bw() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 11))
+
+# ============
+# Outputs
+
+ggsave("fig1_femax_timeseries.pdf", p1, width = 8, height = 3.5)
+ggsave("fig2_edge_density.pdf",     p2, width = 8, height = 3.5)
+ggsave("fig3_boxplot_avg.pdf", p3a, width = 6, height = 4)
+ggsave("fig4_boxplot_max.pdf", p3b, width = 6, height = 4)
+
+```
+
+```{r}
+# ============
+# Cross-sectional mean log-volatility time series (Stationary figure)
+
+mean_calm_ts   <- colMeans(x0[, tt_calm])
+mean_crisis_ts <- colMeans(x0[, tt_crisis])
+
+df_mean <- data.frame(
+  date   = c(dates[tt_calm], dates[tt_crisis]),
+  value  = c(mean_calm_ts, mean_crisis_ts),
+  period = c(rep("Calm (2004-2006)",   length(tt_calm)),
+             rep("Crisis (2007-2009)", length(tt_crisis)))
+)
+
+p_mean <- ggplot(df_mean, aes(x = date, y = value, color = period)) +
+  geom_line(linewidth = 0.4, alpha = 0.8) +
+  geom_hline(yintercept = mean(mean_calm_ts),   linetype = "dashed",
+             color = "#2166ac", linewidth = 0.5) +
+  geom_hline(yintercept = mean(mean_crisis_ts), linetype = "dashed",
+             color = "#d6604d", linewidth = 0.5) +
+  scale_color_manual(values = c("Calm (2004-2006)"   = "#2166ac",
+                                "Crisis (2007-2009)" = "#d6604d")) +
+  labs(title = "Figure 3: Cross-Sectional Mean Log-Volatility",
+       subtitle = "Dashed lines indicate period means",
+       x = NULL, y = "Mean log-volatility", color = NULL) +
+  theme_bw() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 11))
+
+ggsave("fig0_mean_logvol.pdf", p_mean, width = 8, height = 3.5)
+```
+
+# Reference
+
+1. Barigozzi M, Cho H, Owens D (2024). fnets: Factor-Adjusted Network Estimation and Forecasting for High-Dimensional Time Series. doi:10.32614/CRAN.package.fnets <https://doi.org/10.32614/CRAN.package.fnets>, R package version
+  0.1.6, <https://CRAN.R-project.org/package=fnets>.
+
+2. Komsta L, Novomestky F (2022). moments: Moments, Cumulants, Skewness, Kurtosis and Related Tests.
+  doi:10.32614/CRAN.package.moments <https://doi.org/10.32614/CRAN.package.moments>, 
+  R package version 0.14.1, <https://CRAN.R-project.org/package=moments>.
+
+3. Trapletti A, Hornik K (2026). tseries: Time Series Analysis and Computational Finance.
+  doi:10.32614/CRAN.package.tseries <https://doi.org/10.32614/CRAN.package.tseries>, R package version 0.10-61,
+  <https://CRAN.R-project.org/package=tseries>.

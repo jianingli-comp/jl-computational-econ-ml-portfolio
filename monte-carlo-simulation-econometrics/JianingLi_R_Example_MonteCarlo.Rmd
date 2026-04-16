@@ -1,0 +1,261 @@
+---
+title: "Model Mis-specification Monte Carlo Simulation"
+author: "Jianing Li"
+date: "2026-01-07"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Project Overview
+
+This document presents a Monte Carlo simulation study examining
+the finite-sample bias, variance, and MSE of OLS estimators under
+model misspecification. The simulation focuses on omitted-variable
+bias under alternative correlation structures and sample sizes.
+All simulations are implemented in R and are fully reproducible.
+
+Note: This simulation was originally developed as part of a graduate
+econometrics course and has been lightly reorganized for clarity.
+
+# Model mis-specification Mote Carlo simulations
+
+True Model: $y_t=\alpha+\beta x_{1t}+\gamma x_{2t}+u_t$
+
+Under-specified Model: $y_t=\alpha+\beta x_{1t}+e_t$ for $t=1,2,...,621$.
+
+## (1)  Generate the data under the true model
+
+```{r}
+library(MASS) # For multivariate models
+library(ggplot2)
+library(reshape2)
+
+# Set seed so Professor Xu can reproduce the same thing :D
+set.seed(622)
+
+n = 621
+mu = matrix(c(0, 1), nrow = 2, byrow = TRUE)
+
+sigma1 = 1
+sigma2 = 4
+alpha = 0.6
+beta = 0.2
+gamma = 0.1
+rho = 0.126
+
+Sigma = matrix(c(sigma1^2, rho*sigma1*sigma2, rho*sigma1*sigma2, sigma2^2), nrow = 2, byrow = TRUE)
+
+u = rnorm(n, 0, 1)
+
+X = mvrnorm(n, mu = c(0,1), Sigma = Sigma)
+x1 = X[, 1]
+x2 = X[, 2]
+
+y = alpha + beta*x1 + gamma*x2 + u
+```
+
+## (2) Run regressions
+
+1. True model
+
+```{r}
+true_model = lm(y ~ x1 + x2)
+true_model_results = coef(true_model)
+true_model_results
+```
+
+2. Under-specified model
+
+```{r}
+under_model = lm(y ~ x1)
+under_model_results = coef(under_model)
+under_model_results
+```
+
+## (3) Repeat 621 times and Calculate the mean, bias, variance, minimum, maximum and mean square error
+
+```{r}
+stats_calculation = function(est, value){
+  bias = colMeans(est) - value
+  variance = apply(est, 2, var)
+  mse = bias ^ 2 + variance
+  
+results = data.frame(
+  Parameter = colnames(est),
+  True_Value = value,
+  Mean = colMeans(est),
+  Bias = bias,
+  Variance = variance,
+  MSE = mse,
+  Min = apply(est, 2, min),
+  Max = apply(est, 2, max)
+)
+
+return(results)
+}
+
+simulation = function(rho_value, n_obs, n_sims) {
+  n = n_obs
+  mu = matrix(c(0, 1), nrow = 2, byrow = TRUE)
+  sigma1 = 1
+  sigma2 = 4
+  alpha = 0.6
+  beta = 0.2
+  gamma = 0.1
+  
+  Sigma = matrix(c(sigma1^2, rho*sigma1*sigma2,
+                   rho_value*sigma1*sigma2, sigma2^2), nrow = 2,
+                 byrow = TRUE)
+
+  true_model_results = matrix(NA, nrow = n_sims, ncol = 3)
+  colnames(true_model_results) <- c("alpha_hat", "beta_hat", "gamma_hat")
+  
+  under_model_results = matrix(NA, nrow = n_sims, ncol = 2)
+  colnames(under_model_results) = c("alpha_hat", "beta_hat")
+  
+  for (i in 1:n_sims) {
+    set.seed(i)
+    u = rnorm(n, 0, 1)
+
+    X = mvrnorm(n, mu = c(0,1), Sigma = Sigma)
+    x1 = X[, 1]
+    x2 = X[, 2]
+    y = alpha + beta*x1 + gamma*x2 + u
+  
+    true_model = lm(y ~ x1 + x2)
+    true_model_results[i, ] = coef(true_model)
+
+    under_model = lm(y ~ x1)
+    under_model_results[i, ] = coef(under_model)
+  }
+  
+   true_summary = stats_calculation(true_model_results, 
+                                 c(alpha, beta,
+                                   gamma))
+  
+  under_summary =   
+    stats_calculation(under_model_results, 
+                      c(alpha, beta))
+  
+  return(list(
+    true_model = true_model_results,
+    under_model = under_model_results,
+    true_summary = true_summary,
+    under_summary = under_summary,
+    rho = rho_value
+  ))
+}
+
+create_summary_table = function(results, model_name) {
+  true_df = results$true_summary
+  under_df = results$under_summary
+  
+  combined <- rbind(
+    cbind(Model = "True", true_df),
+    cbind(Model = "Under-specified", 
+          rbind(under_df, 
+                data.frame(Parameter = "gamma_hat", True_Value = 0.1, 
+                           Mean = NA, Bias = NA, Variance = NA, MSE = NA, 
+                           Min = NA, Max = NA)))
+  )
+  
+  formatted = combined[, c("Model", "Parameter", "True_Value", "Mean", "Bias", "Variance", "MSE")]
+  colnames(formatted) = c("Model", "Parameter", "True Value", "Mean", "Bias", "Variance", "MSE")
+  
+  formatted[, 3:7] = round(formatted[, 3:7], 4)
+  
+  cat(paste("\n", model_name, "\n"))
+  cat("=====================\n")
+  print(formatted, row.names = FALSE)
+  cat("\n")
+  
+  return(formatted)
+}
+
+results_rho1 = simulation(rho_value = 0.126, n_obs = 621, n_sims = 621)
+
+table_rho1 = create_summary_table(results_rho1, "SUMMARY TABLE: rho = 0.126")
+table_rho1
+
+create_comparison_plots = function(results, rho_value) {
+  true_beta = data.frame(Value = results$true_model[, "beta_hat"], Model = "True Model")
+  under_beta = data.frame(Value = results$under_model[, "beta_hat"], Model = "Under-specified")
+  beta_data = rbind(true_beta, under_beta)
+  
+  true_alpha = data.frame(Value = results$true_model[, "alpha_hat"], Model = "True Model")
+  under_alpha = data.frame(Value = results$under_model[, "alpha_hat"], Model = "Under-specified")
+  alpha_data = rbind(true_alpha, under_alpha)
+  
+  p1 = ggplot(beta_data, aes(x = Value, fill = Model)) +
+    geom_histogram(alpha = 0.7, position = "identity", bins = 30) +
+    geom_vline(xintercept = 0.2, linetype = "dashed", color = "black", size = 1) +
+    labs(title = paste("Distribution of Beta Estimates (rho =", rho_value, ")"),
+         x = "Beta Estimate", y = "Frequency") +
+    theme_minimal() +
+    scale_fill_manual(values = c("True Model" = "blue", "Under-specified" = "red"))
+  
+  p2 = ggplot(alpha_data, aes(x = Value, fill = Model)) +
+    geom_histogram(alpha = 0.7, position = "identity", bins = 30) +
+    geom_vline(xintercept = 0.6, linetype = "dashed", color = "black", size = 1) +
+    labs(title = paste("Distribution of Alpha Estimates (rho =", rho_value, ")"),
+         x = "Alpha Estimate", y = "Frequency") +
+    theme_minimal() +
+    scale_fill_manual(values = c("True Model" = "blue", "Under-specified" = "red"))
+  
+  gamma_data = data.frame(Value = results$true_model[, "gamma_hat"])
+  p3 <- ggplot(gamma_data, aes(x = Value)) +
+    geom_histogram(fill = "green", alpha = 0.7, bins = 30) +
+    geom_vline(xintercept = 0.1, linetype = "dashed", color = "black", size = 1) +
+    labs(title = paste("Distribution of Gamma Estimates (rho =", rho_value, ")"),
+         x = "Gamma Estimate", y = "Frequency") +
+    theme_minimal()
+  
+  bias_data = data.frame(
+    Model = c("True", "Under-specified"),
+    Beta_Bias = c(results$true_summary$Bias[2], results$under_summary$Bias[2]),
+    Alpha_Bias = c(results$true_summary$Bias[1], results$under_summary$Bias[1])
+  )
+  
+  bias_melted = melt(bias_data, id.vars = "Model")
+  p4 = ggplot(bias_melted, aes(x = Model, y = value, fill = variable)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+    labs(title = paste("Bias Comparison (rho =", rho_value, ")"),
+         y = "Bias", fill = "Parameter") +
+    theme_minimal() +
+    scale_fill_manual(values = c("Beta_Bias" = "darkblue", "Alpha_Bias" = "darkred"))
+  
+  print(p1)
+  print(p2)
+  print(p3)
+  print(p4)
+  
+  return(list(p1, p2, p3, p4))
+}
+
+plots_rho1 = create_comparison_plots(results_rho1, 0.126)
+plots_rho1
+
+
+```
+
+
+## (4) Repeat 621 times with rho = 0.621
+
+```{r}
+
+results_rho2 = simulation(rho_value = 0.621, n_obs = 621, n_sims = 621)
+table_rho2 = create_summary_table(results_rho2, "SUMMARY TABLE: rho = 0.621")
+plots_rho2 = create_comparison_plots(results_rho2, 0.621)
+
+```
+
+
+## (5) Comments
+
+Comparing to the true model, under-specified model shows a significant bias in $\beta$ estimates.  When $\rho = 0.126$ is lower, it produces small bias, when $\rho = 0.621$ is higher, it gives larger bias, which results in a poor performance.
+
+From above, we assume that the cost of omitting variables increases with their correlation to included variables. High correlation makes misspecification worsen in bias and performance.

@@ -19,7 +19,7 @@ Co-op, Research Assistant, and PhD applications.
 
 ## Featured Project
 
-### Distributed Graph Analytics with Spark GraphX
+### Distributed Graph Analytics with Apache Spark GraphX
 Graduate-level distributed systems project analyzing PageRank,
 Connected Components, and Triangle Count using Apache Spark GraphX.
 
@@ -34,7 +34,7 @@ This project serves as a deep, research-style investigation into distributed
 graph processing and complements the lower-level system implementations
 described below.
 
-### Distributed Systems with Spark
+### Distributed Systems with Apache Spark
 
 A collection of projects implemented using low-level Spark primitives (RDDs),
 designed to make execution behavior explicit rather than abstracted away.

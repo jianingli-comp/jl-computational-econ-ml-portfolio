@@ -80,7 +80,7 @@ A Python replication of the R pipeline using `rpy2` to call `fnets` internals di
 
 Source: Barigozzi, Cho & Owens (2024), retrieved from WRDS. The panel contains daily log-volatility measures for 46 U.S. financial firms (GICS classification), January 3, 2000 – December 31, 2012 (3,267 trading days). Volatility is computed as `log(0.361 * (p_high - p_low)²)`.
 
-The raw data file `blm.RData` is not included in this repository. See the original paper for data access details.
+The raw data file `blm.RData` is included in this directory.
 
 ---
 
